@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AR Монстр на банке</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            background: #0F1117;
+            color: #F5EFE6;
+            overflow: hidden;
+        }
+        
+        #container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #instructions {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 17, 23, 0.9);
+            padding: 16px 24px;
+            border-radius: 8px;
+            border: 1px solid #22D3EE;
+            z-index: 100;
+            text-align: center;
+            max-width: 320px;
+            backdrop-filter: blur(8px);
+        }
+        
+        #instructions h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #22D3EE;
+        }
+        
+        #instructions p {
+            font-size: 14px;
+            opacity: 0.9;
+            line-height: 1.4;
+        }
+        
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #0F1117;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            transition: opacity 0.5s;
+        }
+        
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(34, 211, 238, 0.2);
+            border-top-color: #22D3EE;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        #loading p {
+            font-size: 14px;
+            opacity: 0.7;
+        }
+        
+        .error {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(248, 113, 113, 0.15);
+            border: 1px solid #F87171;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 300px;
+            text-align: center;
+            z-index: 300;
+            display: none;
+        }
+        
+        .error.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Загрузка AR...</p>
+    </div>
+    
+    <div id="container"></div>
+    
+    <div id="instructions">
+        <h2>📸 Наведите камеру</h2>
+        <p>Покажите изображение банки целиком, чтобы увидеть монстра</p>
+    </div>
+    
+    <div id="error" class="error">
+        <p>Не удалось запустить AR. Проверьте разрешения камеры.</p>
+    </div>
+
+    <!-- Mind AR + Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+
+    <script type="module">
+        const startAR = async () => {
+            try {
+                // Инициализация Mind AR
+                const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+                    container: document.querySelector("#container"),
+                    imageTargetSrc: './targets.mind', // Файл с целевым изображением банки
+                    uiLoading: "no",
+                    uiScanning: "no",
+                    uiError: "no",
+                });
+
+                const { renderer, scene, camera } = mindarThree;
+
+                // Настройка освещения
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(1, 1, 1);
+                scene.add(directionalLight);
+
+                // Создание якоря для привязки к изображению банки
+                const anchor = mindarThree.addAnchor(0);
+
+                // Создание простого 3D-персонажа (в реальном проекте — загрузка GLB-модели)
+                // Здесь создадим простого "монстра" из примитивов
+                const monster = createMonster();
+                anchor.group.add(monster);
+
+                // Анимация
+                let time = 0;
+                const animate = () => {
+                    time += 0.016;
+                    
+                    // Прыжки
+                    monster.position.y = Math.abs(Math.sin(time * 2)) * 0.3 + 0.5;
+                    
+                    // Покачивание
+                    monster.rotation.z = Math.sin(time * 3) * 0.1;
+                    
+                    // Вращение вокруг банки
+                    const circleRadius = 0.6;
+                    monster.position.x = Math.cos(time) * circleRadius;
+                    monster.position.z = Math.sin(time) * circleRadius;
+                    
+                    // Поворот к центру
+                    monster.lookAt(0, monster.position.y, 0);
+                };
+
+                // Запуск AR
+                await mindarThree.start();
+                
+                document.getElementById('loading').classList.add('hidden');
+
+                renderer.setAnimationLoop(() => {
+                    animate();
+                    renderer.render(scene, camera);
+                });
+
+            } catch (error) {
+                console.error('AR Error:', error);
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('error').classList.add('show');
+            }
+        };
+
+        function createMonster() {
+            const group = new THREE.Group();
+            
+            // Тело
+            const bodyGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+            const bodyMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x22D3EE,
+                shininess: 80
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.scale.set(1, 1.2, 1);
+            group.add(body);
+            
+            // Глаза
+            const eyeGeometry = new THREE.SphereGeometry(0.04, 12, 12);
+            const eyeMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            
+            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            leftEye.position.set(-0.05, 0.08, 0.12);
+            group.add(leftEye);
+            
+            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            rightEye.position.set(0.05, 0.08, 0.12);
+            group.add(rightEye);
+            
+            // Зрачки
+            const pupilGeometry = new THREE.SphereGeometry(0.02, 12, 12);
+            const pupilMaterial = new THREE.MeshPhongMaterial({ color: 0x0F1117 });
+            
+            const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+            leftPupil.position.set(-0.05, 0.08, 0.14);
+            group.add(leftPupil);
+            
+            const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+            rightPupil.position.set(0.05, 0.08, 0.14);
+            group.add(rightPupil);
+            
+            // Рот
+            const mouthGeometry = new THREE.TorusGeometry(0.04, 0.01, 8, 16, Math.PI);
+            const mouthMaterial = new THREE.MeshPhongMaterial({ color: 0xF87171 });
+            const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
+            mouth.rotation.x = Math.PI;
+            mouth.position.set(0, 0, 0.13);
+            group.add(mouth);
+            
+            // Рожки
+            const hornGeometry = new THREE.ConeGeometry(0.03, 0.12, 8);
+            const hornMaterial = new THREE.MeshPhongMaterial({ color: 0xFBBF24 });
+            
+            const leftHorn = new THREE.Mesh(hornGeometry, hornMaterial);
+            leftHorn.position.set(-0.08, 0.15, 0);
+            leftHorn.rotation.z = -0.3;
+            group.add(leftHorn);
+            
+            const rightHorn = new THREE.Mesh(hornGeometry, hornMaterial);
+            rightHorn.position.set(0.08, 0.15, 0);
+            rightHorn.rotation.z = 0.3;
+            group.add(rightHorn);
+            
+            // Тень под монстром
+            const shadowGeometry = new THREE.CircleGeometry(0.15, 16);
+            const shadowMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x000000,
+                transparent: true,
+                opacity: 0.3
+            });
+            const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+            shadow.rotation.x = -Math.PI / 2;
+            shadow.position.y = -0.3;
+            group.add(shadow);
+            
+            group.scale.set(1.5, 1.5, 1.5);
+            group.position.y = 0.5;
+            
+            return group;
+        }
+
+        // Запуск при загрузке
+        startAR();
+    </script>
+</body>
+</html>

@@ -6,23 +6,20 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>AR Монстр на банке</title>
 
-<!-- 1. A-Frame -->
 <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-<!-- 2. MindAR для A-Frame (проверенная связка, работает на iOS) -->
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-<!-- 3. Компонент монстра. Регистрируется ДО сцены — так требует A-Frame -->
 <script>
 (function () {
   AFRAME.registerComponent('ar-monster', {
     schema: {
-      size:        {type: 'number',  default: 0.13},  // размер монстра (1.0 = ширина этикетки)
-      canRadius:   {type: 'number',  default: 0.16},  // радиус банки = ширина этикетки / 6.28
-      canHeight:   {type: 'number',  default: 0.72},  // высота этикетки на банке
-      orbitSpeed:  {type: 'number',  default: 1.3},   // скорость бега вокруг банки
-      modeSeconds: {type: 'number',  default: 6.0},   // сколько длится каждая анимация
-      showCan:     {type: 'boolean', default: true},  // показать полупрозрачный макет банки
-      showBody:    {type: 'boolean', default: true}   // false = отключить примитивы (для своей 3D-модели)
+      size:        {type: 'number',  default: 0.13},
+      canRadius:   {type: 'number',  default: 0.16},
+      canHeight:   {type: 'number',  default: 0.72},
+      orbitSpeed:  {type: 'number',  default: 1.3},
+      modeSeconds: {type: 'number',  default: 6.0},
+      showCan:     {type: 'boolean', default: true},
+      showBody:    {type: 'boolean', default: true}
     },
 
     init: function () {
@@ -38,13 +35,12 @@
       this.root = new T.Group();
       this.el.object3D.add(this.root);
 
-      const skin  = new T.MeshStandardMaterial({color: 0x4DE3F2, roughness: 0.42, metalness: 0.05});
-      const light = new T.MeshStandardMaterial({color: 0xEAFDFF, roughness: 0.5});
-      const dark  = new T.MeshStandardMaterial({color: 0x14212B, roughness: 0.6});
-      const hornM = new T.MeshStandardMaterial({color: 0xFFC857, roughness: 0.35, metalness: 0.2});
-      const mouthM= new T.MeshStandardMaterial({color: 0xFF6B6B, roughness: 0.5});
+      const skin   = new T.MeshStandardMaterial({color: 0x4DE3F2, roughness: 0.42, metalness: 0.05});
+      const light  = new T.MeshStandardMaterial({color: 0xEAFDFF, roughness: 0.5});
+      const dark   = new T.MeshStandardMaterial({color: 0x14212B, roughness: 0.6});
+      const hornM  = new T.MeshStandardMaterial({color: 0xFFC857, roughness: 0.35, metalness: 0.2});
+      const mouthM = new T.MeshStandardMaterial({color: 0xFF6B6B, roughness: 0.5});
 
-      // ---- корпус ----
       this.body = new T.Group();
       this.body.visible = this.data.showBody;
       this.root.add(this.body);
@@ -53,7 +49,6 @@
       torso.scale.set(1, 1.06, 0.94);
       this.body.add(torso);
 
-      // ---- глаза ----
       [-1, 1].forEach(function (side) {
         const eye = new T.Mesh(new T.SphereGeometry(s * 0.30, 16, 14), light);
         eye.position.set(side * s * 0.34, s * 0.20, s * 0.72);
@@ -64,7 +59,6 @@
         this.body.add(pupil);
       }, this);
 
-      // ---- рожки ----
       [-1, 1].forEach(function (side) {
         const h = new T.Mesh(new T.ConeGeometry(s * 0.17, s * 0.62, 12), hornM);
         h.position.set(side * s * 0.45, s * 0.98, 0);
@@ -72,13 +66,11 @@
         this.body.add(h);
       }, this);
 
-      // ---- улыбка ----
       const smile = new T.Mesh(new T.TorusGeometry(s * 0.26, s * 0.055, 8, 18, Math.PI), mouthM);
       smile.position.set(0, s * 0.02, s * 0.80);
       smile.rotation.x = Math.PI;
       this.body.add(smile);
 
-      // ---- лапки ----
       [-1, 1].forEach(function (side) {
         const foot = new T.Mesh(new T.SphereGeometry(s * 0.27, 14, 12), skin);
         foot.position.set(side * s * 0.38, -s * 0.90, s * 0.16);
@@ -86,7 +78,6 @@
         this.body.add(foot);
       }, this);
 
-      // ---- руки (на пивотах, чтобы махать) ----
       this.arms = [];
       [-1, 1].forEach(function (side) {
         const pivot = new T.Group();
@@ -104,13 +95,10 @@
         this.arms.push({pivot: pivot, side: side});
       }, this);
 
-      // ---- полупрозрачный макет банки (для калибровки) ----
       if (this.data.showCan) {
         const can = new T.Mesh(
           new T.CylinderGeometry(this.data.canRadius, this.data.canRadius, this.data.canHeight, 40, 1, true),
-          new T.MeshBasicMaterial({
-            color: 0x22D3EE, transparent: true, opacity: 0.16, side: T.DoubleSide
-          })
+          new T.MeshBasicMaterial({color: 0x22D3EE, transparent: true, opacity: 0.16, side: T.DoubleSide})
         );
         can.position.set(0, 0, -this.data.canRadius);
         this.el.object3D.add(can);
@@ -138,15 +126,14 @@
 
       const d = this.data;
       const s = d.size;
-      const half = d.canHeight / 2;         // верх банки
-      const groundY = -half;                // низ банки
-      const axisZ = -d.canRadius;           // ось банки (спрятана за этикеткой)
-      const R = d.canRadius + s * 0.95;     // радиус орбиты монстра
+      const half = d.canHeight / 2;
+      const groundY = -half;
+      const axisZ = -d.canRadius;
+      const R = d.canRadius + s * 0.95;
 
       if (this.modeTime >= d.modeSeconds) this.nextMode();
 
       if (this.mode === 'hug') {
-        // Обнимает банку: стоит вплотную, руки вперёд и внутрь, покачивается
         const sway = Math.sin(this.clock * 1.5);
         this.root.position.set(0, groundY + s * 1.02 + sway * s * 0.04, s * 0.92);
         this.root.rotation.set(0, sway * 0.18, sway * 0.05);
@@ -154,7 +141,6 @@
         this.root.scale.set(1 - sway * 0.03, 1 + sway * 0.04, 1 - sway * 0.03);
 
       } else if (this.mode === 'run') {
-        // Бегает по кругу вокруг банки
         const th = this.clock * d.orbitSpeed;
         const bob = Math.abs(Math.sin(this.clock * d.orbitSpeed * 2.6));
         this.root.position.set(
@@ -171,33 +157,32 @@
         this.root.scale.set(1, 1, 1);
 
       } else {
-        // Запрыгивает на банку и обратно
         const T = 2.6;
         const u = (this.clock % T) / T;
         const frontZ = s * 0.95;
-        let y, z, k = 0;   // k — растяжение/приседание
+        let y, z, k = 0;
 
-        if (u < 0.18) {                       // присед перед прыжком
+        if (u < 0.18) {
           const t = u / 0.18;
           y = groundY + s * 1.02 - t * s * 0.25;
           z = frontZ;
           k = -0.18 * t;
-        } else if (u < 0.40) {                // прыжок наверх
+        } else if (u < 0.40) {
           const t = (u - 0.18) / 0.22;
           y = (groundY + s * 0.77) + (half + s * 0.80 - (groundY + s * 0.77)) * t;
           z = frontZ + (axisZ - frontZ) * t;
           k = 0.16 * Math.sin(t * Math.PI);
-        } else if (u < 0.70) {                // стоит на банке
+        } else if (u < 0.70) {
           const t = (u - 0.40) / 0.30;
           y = half + s * 0.80 + Math.abs(Math.sin(t * Math.PI * 2)) * s * 0.18;
           z = axisZ;
           k = -0.10 * Math.abs(Math.sin(t * Math.PI * 2));
-        } else if (u < 0.88) {                // прыжок вниз
+        } else if (u < 0.88) {
           const t = (u - 0.70) / 0.18;
           y = (half + s * 0.80) + ((groundY + s * 1.02) - (half + s * 0.80)) * t;
           z = axisZ + (frontZ - axisZ) * t;
           k = 0.12 * Math.sin(t * Math.PI);
-        } else {                              // приземление
+        } else {
           const t = (u - 0.88) / 0.12;
           y = groundY + s * 1.02;
           z = frontZ;
@@ -216,6 +201,7 @@
 
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0F1117; }
+
   #hud {
     position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
     background: rgba(15,17,23,.85); color: #F5EFE6;
@@ -227,23 +213,61 @@
   }
   #hud.found { background: rgba(34,211,238,.92); color: #0F1117; border-color: #22D3EE; }
   #hudMode { font-size: 12px; opacity: .75; margin-top: 4px; }
+
   #hint {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
     color: rgba(245,239,230,.7); font-family: -apple-system, system-ui, sans-serif;
     font-size: 12px; z-index: 1000; pointer-events: none; text-align: center;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8);
   }
+
+  /* Панель диагностики: показывается, только если что-то пошло не так */
+  #fatal {
+    position: fixed; inset: 0; z-index: 2000; display: none;
+    align-items: center; justify-content: center; padding: 20px;
+    background: rgba(15,17,23,.97);
+    font-family: -apple-system, system-ui, sans-serif;
+  }
+  #fatal.show { display: flex; }
+  #fatalBox {
+    background: #1A1F2B; border: 1px solid #F87171; border-radius: 12px;
+    padding: 22px; max-width: 420px; width: 100%; color: #F5EFE6;
+  }
+  #fatalBox h2 { margin: 0 0 12px; font-size: 17px; color: #F87171; }
+  #fatalBox p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
+  #fatalBox code {
+    display: block; background: #0B0E14; padding: 10px; border-radius: 6px;
+    font-size: 11px; word-break: break-all; margin-top: 12px; color: #9AA4B2;
+  }
+  #fatalBox .good { color: #4DE3F2; }
 </style>
 </head>
 <body>
 
 <div id="hud">
-  <div id="hudStatus">📸 Наведите камеру на банку</div>
+  <div id="hudStatus">📸 Наведите камеру</div>
   <div id="hudMode">Монстр обнимает банку</div>
 </div>
 <div id="hint">Нажмите на экран, чтобы сменить анимацию</div>
 
+<div id="fatal"><div id="fatalBox"></div></div>
+
+<!--
+  ═══════════════════════════════════════════════════════════════
+   ЕДИНСТВЕННАЯ СТРОКА, КОТОРУЮ НУЖНО ПОМЕНЯТЬ:  imageTargetSrc
+
+   СЕЙЧАС стоит тестовая карточка MindAR — чтобы проверить,
+   что весь конвейер работает. Монстр появится на тестовой картинке.
+
+   КОГДА БУДЕТ ГОТОВ targets.mind ОТ ВАШЕЙ БАНКИ — замените ссылку на:
+       imageTargetSrc: ./targets.mind;
+
+  ⚠️ Файл targets.mind ДОЛЖЕН лежать рядом с этим HTML на хостинге.
+     Если его нет — камера не запустится вообще (MindAR падает на загрузке).
+  ═══════════════════════════════════════════════════════════════
+-->
 <a-scene
-  mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1"
+  mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1"
   color-space="sRGB"
   renderer="colorManagement: true"
   vr-mode-ui="enabled: false"
@@ -251,29 +275,23 @@
 >
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-  <!-- Свет: без него MeshStandardMaterial будет чёрным -->
   <a-entity light="type: ambient; color: #FFFFFF; intensity: 1.1"></a-entity>
   <a-entity light="type: directional; color: #FFFFFF; intensity: 0.9" position="0.4 1 1"></a-entity>
   <a-entity light="type: hemisphere; color: #CFFAFE; groundColor: #4C1D95; intensity: 0.5"></a-entity>
 
   <a-entity mindar-image-target="targetIndex: 0">
-
-    <!-- Монстр из примитивов -->
     <a-entity ar-monster="size: 0.13; canRadius: 0.16; canHeight: 0.72; showCan: true"></a-entity>
-
-    <!-- Когда будет готова своя 3D-модель, замените блок выше на:
-         <a-entity ar-monster="showBody: false; showCan: false"></a-entity>
-         <a-entity gltf-model="url(./monster.glb)"
-                   position="0 0 0" scale="0.3 0.3 0.3"></a-entity>
-         Для проигрывания анимаций из glTF добавьте aframe-extras и animation-mixer -->
-
   </a-entity>
 </a-scene>
 
 <script>
-  const sceneEl = document.querySelector('a-scene');
+(function () {
+  const sceneEl   = document.querySelector('a-scene');
+  const hud       = document.getElementById('hud');
   const hudStatus = document.getElementById('hudStatus');
-  const hudMode = document.getElementById('hudMode');
+  const hudMode   = document.getElementById('hudMode');
+  const fatal     = document.getElementById('fatal');
+  const fatalBox  = document.getElementById('fatalBox');
 
   const MODE_LABELS = {
     hug:  'Монстр обнимает банку',
@@ -281,38 +299,129 @@
     jump: 'Монстр запрыгивает на банку'
   };
 
-  const targetEl = document.querySelector('[mindar-image-target]');
+  // ─── Достаём ссылку на target прямо из атрибута сцены ───────────
+  function getTargetUrl() {
+    const raw = sceneEl.getAttribute('mindar-image') || '';
+    const m = /imageTargetSrc:\s*([^;]+)/.exec(raw);
+    return m ? m[1].trim() : null;
+  }
 
-  targetEl.addEventListener('targetFound', function () {
-    hudStatus.textContent = '✅ Банка распознана';
-    document.getElementById('hud').classList.add('found');
-  });
+  function fatalPanel(title, body, detail) {
+    fatalBox.innerHTML =
+      '<h2>' + title + '</h2>' + body +
+      (detail ? '<code>' + detail + '</code>' : '');
+    fatal.classList.add('show');
+  }
 
-  targetEl.addEventListener('targetLost', function () {
-    hudStatus.textContent = '📸 Наведите камеру на банку';
-    document.getElementById('hud').classList.remove('found');
-  });
-
-  sceneEl.addEventListener('loaded', function () {
-    // Запуск камеры
-    sceneEl.systems['mindar-image-system'].start();
-
-    // Подписка на смену анимации
-    const monsterEl = document.querySelector('[ar-monster]');
-    if (monsterEl) {
-      monsterEl.addEventListener('monster-mode', function (e) {
-        hudMode.textContent = MODE_LABELS[e.detail.mode] || '';
-      });
+  // ─── ПРЕДПОЛЁТНАЯ ПРОВЕРКА: существует ли файл target? ─────────
+  // Это самая частая причина чёрного экрана: MindAR не может
+  // загрузить .mind и вообще не открывает камеру.
+  function preflight() {
+    const url = getTargetUrl();
+    if (!url) {
+      fatalPanel(
+        '⚠️ Не указан imageTargetSrc',
+        '<p>В атрибуте <b>mindar-image</b> у тега &lt;a-scene&gt; нет ссылки на target-файл.</p>',
+        null
+      );
+      return Promise.resolve(false);
     }
+
+    return fetch(url, {method: 'GET', cache: 'no-store'})
+      .then(function (res) {
+        if (res.ok) return true;
+
+        const isLocal = url.indexOf('./') === 0 || url.indexOf('/') === 0;
+        fatalPanel(
+          '⚠️ Файл target не найден',
+          '<p>MindAR не смог загрузить:<br><b>' + url + '</b></p>' +
+          (isLocal
+            ? '<p>Похоже, вы ещё не создали <b>targets.mind</b> от вашей банки ' +
+              'или не загрузили его на хостинг рядом с этим HTML-файлом.</p>' +
+              '<p class="good">Быстрая проверка: замените в атрибуте imageTargetSrc ' +
+              'ссылку на тестовую карточку MindAR — она уже вписана в файле выше.</p>'
+            : '<p>Проверьте ссылку.</p>'),
+          'HTTP ' + res.status + ' · ' + url
+        );
+        return false;
+      })
+      .catch(function (err) {
+        fatalPanel(
+          '⚠️ Не удалось получить target-файл',
+          '<p>Запрос к <b>' + url + '</b> не прошёл.</p>' +
+          '<p>Обычно это значит, что файла нет по этому адресу.</p>',
+          String(err && err.message ? err.message : err)
+        );
+        return false;
+      });
+  }
+
+  // ─── Страховка: если сцена долго не загружается ────────────────
+  const loadTimer = setTimeout(function () {
+    if (!window.__arStarted) {
+      fatalPanel(
+        '⚠️ AR не запустился',
+        '<p>Сцена не загрузилась за 12 секунд.</p>' +
+        '<p>Чаще всего причина — отсутствующий или битый <b>targets.mind</b>, ' +
+        'либо заблокированные скрипты A-Frame/MindAR.</p>',
+        'Проверьте интернет и наличие target-файла'
+      );
+    }
+  }, 12000);
+
+  // ─── Запуск ────────────────────────────────────────────────────
+  preflight().then(function (ok) {
+    if (!ok) {
+      clearTimeout(loadTimer);
+      return;
+    }
+
+    const targetEl = document.querySelector('[mindar-image-target]');
+
+    targetEl.addEventListener('targetFound', function () {
+      hudStatus.textContent = '✅ Изображение найдено';
+      hud.classList.add('found');
+    });
+
+    targetEl.addEventListener('targetLost', function () {
+      hudStatus.textContent = '📸 Наведите камеру';
+      hud.classList.remove('found');
+    });
+
+    sceneEl.addEventListener('loaded', function () {
+      clearTimeout(loadTimer);
+
+      try {
+        sceneEl.systems['mindar-image-system'].start();
+        window.__arStarted = true;
+      } catch (err) {
+        fatalPanel(
+          '⚠️ Ошибка запуска AR',
+          '<p>Камера не открылась.</p>' +
+          '<p>Проверьте, что страница открыта по <b>https://</b>, ' +
+          'и что доступ к камере разрешён в настройках Safari.</p>',
+          String(err && err.message ? err.message : err)
+        );
+        return;
+      }
+
+      const monsterEl = document.querySelector('[ar-monster]');
+      if (monsterEl) {
+        monsterEl.addEventListener('monster-mode', function (e) {
+          hudMode.textContent = MODE_LABELS[e.detail.mode] || '';
+        });
+      }
+    });
   });
 
-  // Тап по экрану = переключить анимацию
+  // ─── Тап = сменить анимацию ────────────────────────────────────
   document.addEventListener('click', function () {
     const monsterEl = document.querySelector('[ar-monster]');
     if (monsterEl && monsterEl.components['ar-monster']) {
       monsterEl.components['ar-monster'].nextMode();
     }
   });
+})();
 </script>
 
 </body>

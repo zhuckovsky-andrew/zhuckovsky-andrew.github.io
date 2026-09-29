@@ -10,7 +10,13 @@
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
 <script>
+// ─── Компонент монстра ────────────────────────────────────────────────
+// Всё создание обёрнуто в try/catch: если монстр почему-то не соберётся,
+// камера всё равно запустится. Так всегда видно, что именно сломалось —
+// AR-трекинг или построение модели.
 (function () {
+  if (typeof AFRAME === 'undefined') return;
+
   AFRAME.registerComponent('ar-monster', {
     schema: {
       size:        {type: 'number',  default: 0.13},
@@ -23,7 +29,29 @@
     },
 
     init: function () {
-      const T = window.THREE;
+      // ⚠️ ГЛАВНОЕ ИСПРАВЛЕНИЕ: A-Frame отдаёт Three.js как AFRAME.THREE.
+      // window.THREE может быть undefined — раньше это роняло объект сцены
+      // и сцена никогда не доходила до состояния 'loaded'.
+      const T = window.THREE || (window.AFRAME && AFRAME.THREE) || null;
+
+      if (!T) {
+        console.error('[AR] Three.js недоступен — монстр не создан');
+        this.failed = true;
+        return;
+      }
+
+      this.T = T;
+
+      try {
+        this.build();
+      } catch (e) {
+        console.error('[AR] Ошибка сборки монстра:', e);
+        this.failed = true;
+      }
+    },
+
+    build: function () {
+      const T = this.T;
       const s = this.data.size;
 
       this.clock = 0;
@@ -106,6 +134,7 @@
     },
 
     nextMode: function () {
+      if (this.failed) return;
       this.modeIndex = (this.modeIndex + 1) % this.modes.length;
       this.mode = this.modes[this.modeIndex];
       this.modeTime = 0;
@@ -120,6 +149,8 @@
     },
 
     tick: function (time, delta) {
+      if (this.failed || !this.root) return;
+
       const dt = Math.min(delta, 60) / 1000;
       this.clock += dt;
       this.modeTime += dt;
@@ -157,8 +188,8 @@
         this.root.scale.set(1, 1, 1);
 
       } else {
-        const T = 2.6;
-        const u = (this.clock % T) / T;
+        const TT = 2.6;
+        const u = (this.clock % TT) / TT;
         const frontZ = s * 0.95;
         let y, z, k = 0;
 
@@ -209,62 +240,76 @@
     border: 1px solid rgba(34,211,238,.45);
     font-family: -apple-system, system-ui, sans-serif; font-size: 14px;
     text-align: center; z-index: 1000; pointer-events: none; max-width: 88vw;
-    transition: background .25s, color .25s;
+    transition: background .25s, color .25s; display: none;
   }
+  #hud.show { display: block; }
   #hud.found { background: rgba(34,211,238,.92); color: #0F1117; border-color: #22D3EE; }
   #hudMode { font-size: 12px; opacity: .75; margin-top: 4px; }
+  #ver { font-size: 10px; opacity: .6; margin-top: 4px; }
 
   #hint {
-    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-    color: rgba(245,239,230,.7); font-family: -apple-system, system-ui, sans-serif;
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    color: rgba(245,239,230,.8); font-family: -apple-system, system-ui, sans-serif;
     font-size: 12px; z-index: 1000; pointer-events: none; text-align: center;
-    text-shadow: 0 1px 3px rgba(0,0,0,.8);
+    text-shadow: 0 1px 3px rgba(0,0,0,.8); display: none;
   }
+  #hint.show { display: block; }
 
-  /* Панель диагностики: показывается, только если что-то пошло не так */
-  #fatal {
-    position: fixed; inset: 0; z-index: 2000; display: none;
-    align-items: center; justify-content: center; padding: 20px;
-    background: rgba(15,17,23,.97);
-    font-family: -apple-system, system-ui, sans-serif;
+  /* Экран запуска — даёт тот самый тап, который требует iOS */
+  #gate {
+    position: fixed; inset: 0; z-index: 2000;
+    background: #0F1117;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 28px;
+    font-family: -apple-system, system-ui, sans-serif; text-align: center;
   }
-  #fatal.show { display: flex; }
-  #fatalBox {
-    background: #1A1F2B; border: 1px solid #F87171; border-radius: 12px;
-    padding: 22px; max-width: 420px; width: 100%; color: #F5EFE6;
+  #gate.hidden { display: none; }
+  #gate h1 { color: #22D3EE; font-size: 22px; margin: 0 0 10px; }
+  #gate p { color: #F5EFE6; opacity: .75; font-size: 14px;
+            line-height: 1.5; margin: 0 0 26px; max-width: 320px; }
+  #startBtn {
+    background: #22D3EE; color: #0F1117; border: none;
+    padding: 17px 40px; border-radius: 10px;
+    font-size: 18px; font-weight: 700; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
-  #fatalBox h2 { margin: 0 0 12px; font-size: 17px; color: #F87171; }
-  #fatalBox p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
-  #fatalBox code {
-    display: block; background: #0B0E14; padding: 10px; border-radius: 6px;
-    font-size: 11px; word-break: break-all; margin-top: 12px; color: #9AA4B2;
+  #startBtn:active { transform: scale(.97); }
+
+  #dbg {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,.75); color: #7DD3FC;
+    font-family: ui-monospace, Menlo, monospace; font-size: 10px;
+    padding: 4px 8px; z-index: 3000; pointer-events: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  #fatalBox .good { color: #4DE3F2; }
 </style>
 </head>
 <body>
 
+<div id="gate">
+  <h1>🎯 AR Монстр</h1>
+  <p>Наведите камеру на тестовую карточку — появится монстр.</p>
+  <button id="startBtn">ЗАПУСТИТЬ AR</button>
+</div>
+
+<div id="dbg">v4 · инициализация…</div>
+
 <div id="hud">
   <div id="hudStatus">📸 Наведите камеру</div>
   <div id="hudMode">Монстр обнимает банку</div>
+  <div id="ver">v4</div>
 </div>
+
 <div id="hint">Нажмите на экран, чтобы сменить анимацию</div>
 
-<div id="fatal"><div id="fatalBox"></div></div>
-
 <!--
-  ═══════════════════════════════════════════════════════════════
-   ЕДИНСТВЕННАЯ СТРОКА, КОТОРУЮ НУЖНО ПОМЕНЯТЬ:  imageTargetSrc
+  ════════════════════════════════════════════════════════════════════════
+   imageTargetSrc — единственное, что меняется под вашу банку.
 
-   СЕЙЧАС стоит тестовая карточка MindAR — чтобы проверить,
-   что весь конвейер работает. Монстр появится на тестовой картинке.
-
-   КОГДА БУДЕТ ГОТОВ targets.mind ОТ ВАШЕЙ БАНКИ — замените ссылку на:
-       imageTargetSrc: ./targets.mind;
-
-  ⚠️ Файл targets.mind ДОЛЖЕН лежать рядом с этим HTML на хостинге.
-     Если его нет — камера не запустится вообще (MindAR падает на загрузке).
-  ═══════════════════════════════════════════════════════════════
+   СЕЙЧАС: тестовая карточка MindAR (проверяем, что весь конвейер жив).
+   ПОТОМ:  imageTargetSrc: ./targets.mind;
+           и файл targets.mind должен лежать рядом с этим HTML.
+  ════════════════════════════════════════════════════════════════════════
 -->
 <a-scene
   mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1"
@@ -287,11 +332,13 @@
 <script>
 (function () {
   const sceneEl   = document.querySelector('a-scene');
+  const gate      = document.getElementById('gate');
+  const startBtn  = document.getElementById('startBtn');
   const hud       = document.getElementById('hud');
   const hudStatus = document.getElementById('hudStatus');
   const hudMode   = document.getElementById('hudMode');
-  const fatal     = document.getElementById('fatal');
-  const fatalBox  = document.getElementById('fatalBox');
+  const hint      = document.getElementById('hint');
+  const dbgEl     = document.getElementById('dbg');
 
   const MODE_LABELS = {
     hug:  'Монстр обнимает банку',
@@ -299,127 +346,136 @@
     jump: 'Монстр запрыгивает на банку'
   };
 
-  // ─── Достаём ссылку на target прямо из атрибута сцены ───────────
-  function getTargetUrl() {
-    const raw = sceneEl.getAttribute('mindar-image') || '';
-    const m = /imageTargetSrc:\s*([^;]+)/.exec(raw);
-    return m ? m[1].trim() : null;
+  function dbg(msg) {
+    console.log('[AR]', msg);
+    if (dbgEl) dbgEl.textContent = 'v4 · ' + msg;
   }
 
-  function fatalPanel(title, body, detail) {
-    fatalBox.innerHTML =
-      '<h2>' + title + '</h2>' + body +
-      (detail ? '<code>' + detail + '</code>' : '');
-    fatal.classList.add('show');
+  // ─── 1. Живы ли библиотеки ─────────────────────────────────────
+  if (typeof AFRAME === 'undefined') {
+    dbg('ОШИБКА: A-Frame не загрузился');
+    gate.querySelector('p').textContent =
+      'A-Frame не загрузился. Проверьте интернет и обновите страницу.';
+    startBtn.style.display = 'none';
+    return;
   }
 
-  // ─── ПРЕДПОЛЁТНАЯ ПРОВЕРКА: существует ли файл target? ─────────
-  // Это самая частая причина чёрного экрана: MindAR не может
-  // загрузить .mind и вообще не открывает камеру.
-  function preflight() {
-    const url = getTargetUrl();
-    if (!url) {
-      fatalPanel(
-        '⚠️ Не указан imageTargetSrc',
-        '<p>В атрибуте <b>mindar-image</b> у тега &lt;a-scene&gt; нет ссылки на target-файл.</p>',
-        null
-      );
-      return Promise.resolve(false);
-    }
+  dbg(typeof THREE !== 'undefined' || AFRAME.THREE ? 'библиотеки OK' : 'Three.js не найден');
 
-    return fetch(url, {method: 'GET', cache: 'no-store'})
-      .then(function (res) {
-        if (res.ok) return true;
+  // ─── 2. События трекинга — подписываемся сразу ─────────────────
+  const targetEl = document.querySelector('[mindar-image-target]');
 
-        const isLocal = url.indexOf('./') === 0 || url.indexOf('/') === 0;
-        fatalPanel(
-          '⚠️ Файл target не найден',
-          '<p>MindAR не смог загрузить:<br><b>' + url + '</b></p>' +
-          (isLocal
-            ? '<p>Похоже, вы ещё не создали <b>targets.mind</b> от вашей банки ' +
-              'или не загрузили его на хостинг рядом с этим HTML-файлом.</p>' +
-              '<p class="good">Быстрая проверка: замените в атрибуте imageTargetSrc ' +
-              'ссылку на тестовую карточку MindAR — она уже вписана в файле выше.</p>'
-            : '<p>Проверьте ссылку.</p>'),
-          'HTTP ' + res.status + ' · ' + url
-        );
-        return false;
-      })
-      .catch(function (err) {
-        fatalPanel(
-          '⚠️ Не удалось получить target-файл',
-          '<p>Запрос к <b>' + url + '</b> не прошёл.</p>' +
-          '<p>Обычно это значит, что файла нет по этому адресу.</p>',
-          String(err && err.message ? err.message : err)
-        );
-        return false;
-      });
-  }
+  targetEl.addEventListener('targetFound', function () {
+    hudStatus.textContent = '✅ Изображение найдено';
+    hud.classList.add('found');
+    dbg('изображение найдено');
+  });
 
-  // ─── Страховка: если сцена долго не загружается ────────────────
-  const loadTimer = setTimeout(function () {
-    if (!window.__arStarted) {
-      fatalPanel(
-        '⚠️ AR не запустился',
-        '<p>Сцена не загрузилась за 12 секунд.</p>' +
-        '<p>Чаще всего причина — отсутствующий или битый <b>targets.mind</b>, ' +
-        'либо заблокированные скрипты A-Frame/MindAR.</p>',
-        'Проверьте интернет и наличие target-файла'
-      );
-    }
-  }, 12000);
+  targetEl.addEventListener('targetLost', function () {
+    hudStatus.textContent = '📸 Наведите камеру';
+    hud.classList.remove('found');
+    dbg('изображение потеряно');
+  });
 
-  // ─── Запуск ────────────────────────────────────────────────────
-  preflight().then(function (ok) {
-    if (!ok) {
-      clearTimeout(loadTimer);
+  // ─── 3. Готовность сцены ───────────────────────────────────────
+  let sceneReady = false;
+
+  function onSceneReady() {
+    sceneReady = true;
+    const sys = sceneEl.systems['mindar-image-system'];
+
+    if (!sys) {
+      dbg('ОШИБКА: MindAR не подключился');
+      gate.querySelector('p').textContent =
+        'MindAR не загрузился. Проверьте сеть и обновите страницу.';
+      startBtn.style.display = 'none';
       return;
     }
 
-    const targetEl = document.querySelector('[mindar-image-target]');
+    const mEl = document.querySelector('[ar-monster]');
+    const monsterOk = !(mEl && mEl.components['ar-monster'] && mEl.components['ar-monster'].failed);
 
-    targetEl.addEventListener('targetFound', function () {
-      hudStatus.textContent = '✅ Изображение найдено';
-      hud.classList.add('found');
-    });
+    dbg(monsterOk ? 'сцена и монстр готовы' : 'сцена готова · монстр НЕ создан (открыть консоль)');
+  }
 
-    targetEl.addEventListener('targetLost', function () {
-      hudStatus.textContent = '📸 Наведите камеру';
-      hud.classList.remove('found');
-    });
+  // 'loaded' срабатывает один раз. Если сцена успела загрузиться
+  // до подписки — ловим через hasLoaded.
+  if (sceneEl.hasLoaded) {
+    onSceneReady();
+  } else {
+    sceneEl.addEventListener('loaded', onSceneReady);
+  }
 
-    sceneEl.addEventListener('loaded', function () {
-      clearTimeout(loadTimer);
+  // ─── 4. Запуск по тапу ─────────────────────────────────────────
+  startBtn.addEventListener('click', function () {
+    startBtn.disabled = true;
+    startBtn.textContent = 'ЗАПУСК…';
+    dbg('запрашиваю камеру…');
 
-      try {
-        sceneEl.systems['mindar-image-system'].start();
-        window.__arStarted = true;
-      } catch (err) {
-        fatalPanel(
-          '⚠️ Ошибка запуска AR',
-          '<p>Камера не открылась.</p>' +
-          '<p>Проверьте, что страница открыта по <b>https://</b>, ' +
-          'и что доступ к камере разрешён в настройках Safari.</p>',
-          String(err && err.message ? err.message : err)
-        );
-        return;
-      }
+    const sys = sceneEl.systems['mindar-image-system'];
 
-      const monsterEl = document.querySelector('[ar-monster]');
-      if (monsterEl) {
-        monsterEl.addEventListener('monster-mode', function (e) {
-          hudMode.textContent = MODE_LABELS[e.detail.mode] || '';
-        });
-      }
-    });
+    if (!sys) {
+      dbg('ОШИБКА: mindar-image-system отсутствует');
+      gate.querySelector('p').textContent =
+        'MindAR не загрузился. Проверьте сеть и обновите страницу.';
+      startBtn.textContent = 'ЗАПУСТИТЬ AR';
+      startBtn.disabled = false;
+      return;
+    }
+
+    let started;
+    try {
+      started = sys.start();
+    } catch (err) {
+      dbg('ошибка старта: ' + err.message);
+      gate.querySelector('p').textContent = 'Камера не открылась: ' + err.message;
+      startBtn.textContent = 'ПОВТОРИТЬ';
+      startBtn.disabled = false;
+      return;
+    }
+
+    Promise.resolve(started)
+      .then(function () {
+        dbg('камера запущена ✓');
+        gate.classList.add('hidden');
+        hud.classList.add('show');
+        hint.classList.add('show');
+
+        const mEl = document.querySelector('[ar-monster]');
+        if (mEl) {
+          mEl.addEventListener('monster-mode', function (e) {
+            hudMode.textContent = MODE_LABELS[e.detail.mode] || '';
+          });
+        }
+      })
+      .catch(function (err) {
+        const msg = String(err && err.message ? err.message : err);
+        dbg('камера не открылась: ' + msg);
+
+        let explain = 'Не удалось открыть камеру.';
+        if (/permission|denied|notallowed/i.test(msg)) {
+          explain = 'Safari не дал доступ к камере: Настройки → Safari → Камера → Разрешить.';
+        } else if (/https|secure/i.test(msg)) {
+          explain = 'Страница открыта без HTTPS. Нужен адрес https://.';
+        }
+
+        gate.querySelector('p').textContent = explain;
+        startBtn.textContent = 'ПОВТОРИТЬ';
+        startBtn.disabled = false;
+      });
   });
 
-  // ─── Тап = сменить анимацию ────────────────────────────────────
-  document.addEventListener('click', function () {
-    const monsterEl = document.querySelector('[ar-monster]');
-    if (monsterEl && monsterEl.components['ar-monster']) {
-      monsterEl.components['ar-monster'].nextMode();
+  // ─── 5. Тап по экрану = сменить анимацию ───────────────────────
+  document.addEventListener('click', function (e) {
+    if (e.target === startBtn) return;
+    const mEl = document.querySelector('[ar-monster]');
+    if (mEl && mEl.components['ar-monster']) {
+      mEl.components['ar-monster'].nextMode();
     }
+  });
+
+  window.addEventListener('error', function (e) {
+    dbg('JS error: ' + (e.message || 'unknown'));
   });
 })();
 </script>

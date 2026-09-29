@@ -4,15 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>AR Монстр на банке</title>
+<title>AR Диагностика</title>
 
 <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
 <script>
-// ─── Компонент монстра ────────────────────────────────────────────────
-// Всё построение в try/catch: если монстр не соберётся, камера всё равно
-// запустится — всегда видно, что сломалось: трекинг или модель.
+// ─── Компонент монстра (тот же, что в рабочей версии) ──────────────
 (function () {
   if (typeof AFRAME === 'undefined') return;
 
@@ -24,26 +22,17 @@
       orbitSpeed:  {type: 'number',  default: 1.3},
       modeSeconds: {type: 'number',  default: 6.0},
       showCan:     {type: 'boolean', default: true},
-      showBody:    {type: 'boolean', default: true}
+      showBody:    {type: 'boolean', default: true},
+      freeFloat:   {type: 'boolean', default: false}  // true = висит перед камерой, трекинг не нужен
     },
 
     init: function () {
-      // Three.js в A-Frame лежит как AFRAME.THREE (window.THREE может быть пуст)
       const T = window.THREE || (window.AFRAME && AFRAME.THREE) || null;
-
-      if (!T) {
-        console.error('[AR] Three.js недоступен — монстр не создан');
-        this.failed = true;
-        return;
-      }
-
+      if (!T) { console.error('[AR] нет Three.js'); this.failed = true; return; }
       this.T = T;
-      try {
-        this.build();
-      } catch (e) {
-        console.error('[AR] Ошибка сборки монстра:', e);
-        this.failed = true;
-      }
+
+      try { this.build(); }
+      catch (e) { console.error('[AR] ошибка сборки:', e); this.failed = true; }
     },
 
     build: function () {
@@ -60,7 +49,7 @@
       this.el.object3D.add(this.root);
 
       const skin   = new T.MeshStandardMaterial({color: 0x4DE3F2, roughness: 0.42, metalness: 0.05});
-      const light  = new T.MeshStandardMaterial({color: 0xEAFDFF, roughness: 0.5});
+      const white  = new T.MeshStandardMaterial({color: 0xEAFDFF, roughness: 0.5});
       const dark   = new T.MeshStandardMaterial({color: 0x14212B, roughness: 0.6});
       const hornM  = new T.MeshStandardMaterial({color: 0xFFC857, roughness: 0.35, metalness: 0.2});
       const mouthM = new T.MeshStandardMaterial({color: 0xFF6B6B, roughness: 0.5});
@@ -74,10 +63,9 @@
       this.body.add(torso);
 
       [-1, 1].forEach(function (side) {
-        const eye = new T.Mesh(new T.SphereGeometry(s * 0.30, 16, 14), light);
+        const eye = new T.Mesh(new T.SphereGeometry(s * 0.30, 16, 14), white);
         eye.position.set(side * s * 0.34, s * 0.20, s * 0.72);
         this.body.add(eye);
-
         const pupil = new T.Mesh(new T.SphereGeometry(s * 0.14, 12, 12), dark);
         pupil.position.set(side * s * 0.36, s * 0.20, s * 0.88);
         this.body.add(pupil);
@@ -147,9 +135,33 @@
     tick: function (time, delta) {
       if (this.failed || !this.root) return;
 
+      // Счётчик кадров — по нему видно, что цикл рендера вообще идёт
+      this.frames = (this.frames || 0) + 1;
+      if (this.frames % 30 === 0) {
+        window.__arFrames = this.frames;
+      }
+
       const dt = Math.min(delta, 60) / 1000;
       this.clock += dt;
       this.modeTime += dt;
+
+      // ─── Режим «свободного полёта»: висит перед камерой ──────────
+      // Трекинг не участвует. Если монстр виден здесь — рендер работает,
+      // а проблема только в распознавании карты.
+      if (this.data.freeFloat) {
+        const bob = Math.sin(this.clock * 1.8);
+        this.root.position.set(
+          Math.sin(this.clock * 0.9) * 0.12,
+          bob * 0.07,
+          0
+        );
+        this.root.rotation.y = this.clock * 1.1;
+        this.root.rotation.z = Math.sin(this.clock * 1.5) * 0.08;
+        this.setArms(-0.28 + bob * 0.15, -0.4);
+        const k = Math.sin(this.clock * 1.8) * 0.03;
+        this.root.scale.set(1 - k, 1 + k, 1 - k);
+        return;
+      }
 
       const d = this.data;
       const s = d.size;
@@ -191,9 +203,7 @@
 
         if (u < 0.18) {
           const t = u / 0.18;
-          y = groundY + s * 1.02 - t * s * 0.25;
-          z = frontZ;
-          k = -0.18 * t;
+          y = groundY + s * 1.02 - t * s * 0.25; z = frontZ; k = -0.18 * t;
         } else if (u < 0.40) {
           const t = (u - 0.18) / 0.22;
           y = (groundY + s * 0.77) + (half + s * 0.80 - (groundY + s * 0.77)) * t;
@@ -211,9 +221,7 @@
           k = 0.12 * Math.sin(t * Math.PI);
         } else {
           const t = (u - 0.88) / 0.12;
-          y = groundY + s * 1.02;
-          z = frontZ;
-          k = -0.22 * Math.sin(t * Math.PI);
+          y = groundY + s * 1.02; z = frontZ; k = -0.22 * Math.sin(t * Math.PI);
         }
 
         this.root.position.set(0, y, z);
@@ -227,78 +235,49 @@
 </script>
 
 <style>
-  /* ═══════════════════════════════════════════════════════════════════
-     ВАЖНО: у html и body НЕ ДОЛЖНО быть непрозрачного фона.
-
-     MindAR вставляет видео-поток как отдельный слой под 3D-холстом
-     (z-index: -2). Опаковый фон body рисуется ПОВЕРХ отрицательных
-     z-index слоёв — и полностью закрывает видео. Камера при этом
-     работает, индикатор горит, а на экране чернота.
-
-     Именно поэтому падало и на iPhone, и на Android.
-     ═══════════════════════════════════════════════════════════════════ */
+  /* Никакого фона у html/body — иначе перекроет видео от камеры */
   html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
-    overflow: hidden;
-    background: transparent;
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    overflow: hidden; background: transparent;
   }
 
-  /* Слой с видео от MindAR — растягиваем на весь экран и держим под холстом */
-  a-scene video,
-  video.mindar-video,
-  .a-scene video {
+  a-scene video, .a-scene video {
     position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
+    top: 0 !important; left: 0 !important;
+    width: 100% !important; height: 100% !important;
     object-fit: cover !important;
     z-index: -2 !important;
   }
+  .a-canvas { background: transparent !important; }
 
-  /* 3D-холст A-Frame должен быть прозрачным, чтобы сквозь него
-     просвечивало видео */
-  .a-canvas {
-    background: transparent !important;
+  #status {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    padding: 14px 16px; text-align: center;
+    font-family: -apple-system, system-ui, sans-serif;
+    pointer-events: none;
+  }
+  #track {
+    display: inline-block; padding: 10px 22px; border-radius: 10px;
+    font-size: 17px; font-weight: 700; letter-spacing: .3px;
+    background: rgba(180, 30, 30, .9); color: #fff;
+  }
+  #track.ok { background: rgba(20, 160, 120, .95); }
+  #meta {
+    margin-top: 8px; font-size: 11px; color: #EAFDFF;
+    font-family: ui-monospace, Menlo, monospace;
+    text-shadow: 0 1px 3px rgba(0,0,0,.9);
   }
 
-  #hud {
-    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
-    background: rgba(15,17,23,.85); color: #F5EFE6;
-    padding: 10px 18px; border-radius: 12px;
-    border: 1px solid rgba(34,211,238,.45);
-    font-family: -apple-system, system-ui, sans-serif; font-size: 14px;
-    text-align: center; z-index: 1000; pointer-events: none; max-width: 88vw;
-    transition: background .25s, color .25s; display: none;
-  }
-  #hud.show { display: block; }
-  #hud.found { background: rgba(34,211,238,.92); color: #0F1117; border-color: #22D3EE; }
-  #hudMode { font-size: 12px; opacity: .75; margin-top: 4px; }
-  #ver { font-size: 10px; opacity: .6; margin-top: 4px; }
-
-  #hint {
-    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
-    color: rgba(245,239,230,.85); font-family: -apple-system, system-ui, sans-serif;
-    font-size: 12px; z-index: 1000; pointer-events: none; text-align: center;
-    text-shadow: 0 1px 3px rgba(0,0,0,.8); display: none;
-  }
-  #hint.show { display: block; }
-
-  /* Экран запуска: свой собственный фон — это нормально, он скрывается */
   #gate {
-    position: fixed; inset: 0; z-index: 2000;
-    background: #0F1117;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center; padding: 28px;
-    font-family: -apple-system, system-ui, sans-serif; text-align: center;
+    position: fixed; inset: 0; z-index: 2000; background: #0F1117;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 28px; text-align: center;
+    font-family: -apple-system, system-ui, sans-serif;
   }
   #gate.hidden { display: none; }
-  #gate h1 { color: #22D3EE; font-size: 22px; margin: 0 0 10px; }
-  #gate p { color: #F5EFE6; opacity: .75; font-size: 14px;
-            line-height: 1.5; margin: 0 0 26px; max-width: 320px; }
+  #gate h1 { color: #22D3EE; font-size: 21px; margin: 0 0 12px; }
+  #gate p { color: #F5EFE6; opacity: .78; font-size: 14px;
+            line-height: 1.55; margin: 0 0 24px; max-width: 330px; }
   #startBtn {
     background: #22D3EE; color: #0F1117; border: none;
     padding: 17px 40px; border-radius: 10px;
@@ -308,10 +287,10 @@
   #startBtn:active { transform: scale(.97); }
 
   #dbg {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: rgba(0,0,0,.6); color: #7DD3FC;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 3000;
+    background: rgba(0,0,0,.65); color: #7DD3FC;
     font-family: ui-monospace, Menlo, monospace; font-size: 10px;
-    padding: 3px 8px; z-index: 3000; pointer-events: none;
+    padding: 3px 8px; pointer-events: none;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 </style>
@@ -319,30 +298,21 @@
 <body>
 
 <div id="gate">
-  <h1>🎯 AR Монстр</h1>
-  <p>Наведите камеру на тестовую карточку — появится монстр.</p>
-  <button id="startBtn">ЗАПУСТИТЬ AR</button>
+  <h1>🔬 Диагностика AR</h1>
+  <p>
+    Сначала появится монстр прямо перед камерой — это проверка отрисовки.
+    Потом наведите камеру на тестовую карточку, чтобы проверить распознавание.
+  </p>
+  <button id="startBtn">ЗАПУСТИТЬ</button>
 </div>
 
-<div id="dbg">v5 · инициализация…</div>
-
-<div id="hud">
-  <div id="hudStatus">📸 Наведите камеру</div>
-  <div id="hudMode">Монстр обнимает банку</div>
-  <div id="ver">v5</div>
+<div id="status">
+  <div id="track">КАРТА НЕ НАЙДЕНА</div>
+  <div id="meta">—</div>
 </div>
 
-<div id="hint">Нажмите на экран, чтобы сменить анимацию</div>
+<div id="dbg">diag-1 · инициализация…</div>
 
-<!--
-  ════════════════════════════════════════════════════════════════════════
-   imageTargetSrc — единственное, что меняется под вашу банку.
-
-   СЕЙЧАС: тестовая карточка MindAR (проверяем, что конвейер жив).
-   ПОТОМ:  imageTargetSrc: ./targets.mind;
-           и файл targets.mind должен лежать рядом с этим HTML.
-  ════════════════════════════════════════════════════════════════════════
--->
 <a-scene
   mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1"
   color-space="sRGB"
@@ -352,10 +322,17 @@
 >
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-  <a-entity light="type: ambient; color: #FFFFFF; intensity: 1.1"></a-entity>
-  <a-entity light="type: directional; color: #FFFFFF; intensity: 0.9" position="0.4 1 1"></a-entity>
-  <a-entity light="type: hemisphere; color: #CFFAFE; groundColor: #4C1D95; intensity: 0.5"></a-entity>
+  <a-entity light="type: ambient; color: #FFFFFF; intensity: 1.2"></a-entity>
+  <a-entity light="type: directional; color: #FFFFFF; intensity: 1" position="0.5 1 1"></a-entity>
+  <a-entity light="type: hemisphere; color: #CFFAFE; groundColor: #4C1D95; intensity: 0.6"></a-entity>
 
+  <!-- ① КОНТРОЛЬНЫЙ МОНСТР — висит перед камерой, трекинг не нужен.
+       Нужен, чтобы отделить «не рисуется» от «не находит карту». -->
+  <a-entity position="0 0 -1.1" scale="2.2 2.2 2.2">
+    <a-entity ar-monster="size: 0.13; freeFloat: true; showCan: false"></a-entity>
+  </a-entity>
+
+  <!-- ② МОНСТР НА КАРТЕ — появляется только при распознавании -->
   <a-entity mindar-image-target="targetIndex: 0">
     <a-entity ar-monster="size: 0.13; canRadius: 0.16; canHeight: 0.72; showCan: true"></a-entity>
   </a-entity>
@@ -363,176 +340,101 @@
 
 <script>
 (function () {
-  const sceneEl   = document.querySelector('a-scene');
-  const gate      = document.getElementById('gate');
-  const startBtn  = document.getElementById('startBtn');
-  const hud       = document.getElementById('hud');
-  const hudStatus = document.getElementById('hudStatus');
-  const hudMode   = document.getElementById('hudMode');
-  const hint      = document.getElementById('hint');
-  const dbgEl     = document.getElementById('dbg');
+  const sceneEl  = document.querySelector('a-scene');
+  const gate     = document.getElementById('gate');
+  const startBtn = document.getElementById('startBtn');
+  const trackEl  = document.getElementById('track');
+  const metaEl   = document.getElementById('meta');
+  const dbgEl    = document.getElementById('dbg');
 
-  const MODE_LABELS = {
-    hug:  'Монстр обнимает банку',
-    run:  'Монстр бегает вокруг банки',
-    jump: 'Монстр запрыгивает на банку'
-  };
+  let frames = 0;
 
   function dbg(msg) {
     console.log('[AR]', msg);
-    if (dbgEl) dbgEl.textContent = 'v5 · ' + msg;
+    if (dbgEl) dbgEl.textContent = 'diag-1 · ' + msg;
   }
 
-  // ─── 1. Библиотеки ─────────────────────────────────────────────
   if (typeof AFRAME === 'undefined') {
-    dbg('ОШИБКА: A-Frame не загрузился');
-    gate.querySelector('p').textContent =
-      'A-Frame не загрузился. Проверьте интернет и обновите страницу.';
+    dbg('A-Frame не загрузился');
+    gate.querySelector('p').textContent = 'A-Frame не загрузился. Обновите страницу.';
     startBtn.style.display = 'none';
     return;
   }
-  dbg('A-Frame OK');
 
-  // ─── 2. Диагностика видео-слоя ─────────────────────────────────
-  // Раз в секунду проверяем, появился ли video и видны ли у него размеры.
-  let videoChecks = 0;
-  const videoWatch = setInterval(function () {
-    videoChecks++;
+  // ─── Раз в секунду показываем состояние ────────────────────────
+  setInterval(function () {
     const v = document.querySelector('a-scene video') || document.querySelector('video');
 
-    if (v) {
-      const r = v.getBoundingClientRect();
-      dbg('video: ' + Math.round(r.width) + '×' + Math.round(r.height) +
-          ' · z=' + getComputedStyle(v).zIndex +
-          ' · readyState=' + v.readyState);
+    // Счётчик кадров монстра: если растёт — цикл рендера живой
+    const f = window.__arFrames || 0;
+    const rendering = f > frames;
+    frames = f;
 
-      // Видео есть, поток идёт, но размеры нулевые — вот она, чернота
-      if (v.readyState >= 2 && (r.width === 0 || r.height === 0)) {
-        dbg('ВИДЕО ЕСТЬ, НО НУЛЕВОГО РАЗМЕРА — проблема в CSS слоёв');
-      }
-    }
-
-    if (videoChecks > 10) clearInterval(videoWatch);
+    metaEl.textContent =
+      'видео ' + (v ? v.videoWidth + '×' + v.videoHeight : 'нет') +
+      ' · кадры ' + f + (rendering ? ' ▲' : ' —') +
+      ' · монстр ' + (window.__monsterState || '?');
   }, 1000);
 
-  // ─── 3. Трекинг ────────────────────────────────────────────────
+  // ─── Состояние монстров ────────────────────────────────────────
+  sceneEl.addEventListener('loaded', function () {
+    const monsters = document.querySelectorAll('[ar-monster]');
+    let failed = 0;
+
+    monsters.forEach(function (el) {
+      const c = el.components['ar-monster'];
+      if (!c || c.failed) failed++;
+    });
+
+    window.__monsterState = failed === 0
+      ? 'OK (' + monsters.length + ')'
+      : 'СБОЙ (' + failed + ' из ' + monsters.length + ')';
+
+    dbg('сцена готова · монстры: ' + window.__monsterState);
+  });
+
+  // ─── Трекинг ───────────────────────────────────────────────────
   const targetEl = document.querySelector('[mindar-image-target]');
 
   targetEl.addEventListener('targetFound', function () {
-    hudStatus.textContent = '✅ Изображение найдено';
-    hud.classList.add('found');
-    dbg('ИЗОБРАЖЕНИЕ НАЙДЕНО ✓');
+    trackEl.textContent = '✅ КАРТА НАЙДЕНА';
+    trackEl.classList.add('ok');
+    dbg('КАРТА НАЙДЕНА');
   });
 
   targetEl.addEventListener('targetLost', function () {
-    hudStatus.textContent = '📸 Наведите камеру';
-    hud.classList.remove('found');
-    dbg('изображение потеряно');
+    trackEl.textContent = 'КАРТА НЕ НАЙДЕНА';
+    trackEl.classList.remove('ok');
+    dbg('карта потеряна');
   });
 
-  // ─── 4. Готовность сцены ───────────────────────────────────────
-  function onSceneReady() {
-    const sys = sceneEl.systems['mindar-image-system'];
-
-    if (!sys) {
-      dbg('ОШИБКА: MindAR не подключился');
-      gate.querySelector('p').textContent =
-        'MindAR не загрузился. Проверьте сеть и обновите страницу.';
-      startBtn.style.display = 'none';
-      return;
-    }
-
-    const mEl = document.querySelector('[ar-monster]');
-    const monsterFailed = mEl && mEl.components['ar-monster'] && mEl.components['ar-monster'].failed;
-
-    dbg(monsterFailed ? 'сцена готова · монстр НЕ создан' : 'сцена и монстр готовы');
-  }
-
-  if (sceneEl.hasLoaded) {
-    onSceneReady();
-  } else {
-    sceneEl.addEventListener('loaded', onSceneReady);
-  }
-
-  // ─── 5. Запуск по тапу ─────────────────────────────────────────
+  // ─── Запуск ────────────────────────────────────────────────────
   startBtn.addEventListener('click', function () {
     startBtn.disabled = true;
     startBtn.textContent = 'ЗАПУСК…';
-    dbg('запрашиваю камеру…');
 
     const sys = sceneEl.systems['mindar-image-system'];
     if (!sys) {
-      dbg('ОШИБКА: mindar-image-system отсутствует');
-      startBtn.textContent = 'ЗАПУСТИТЬ AR';
+      dbg('MindAR не подключился');
+      gate.querySelector('p').textContent = 'MindAR не загрузился. Обновите страницу.';
+      startBtn.textContent = 'ЗАПУСТИТЬ';
       startBtn.disabled = false;
       return;
     }
 
-    let started;
-    try {
-      started = sys.start();
-    } catch (err) {
-      dbg('ошибка старта: ' + err.message);
-      gate.querySelector('p').textContent = 'Камера не открылась: ' + err.message;
-      startBtn.textContent = 'ПОВТОРИТЬ';
-      startBtn.disabled = false;
-      return;
-    }
-
-    Promise.resolve(started)
+    Promise.resolve()
+      .then(function () { return sys.start(); })
       .then(function () {
         gate.classList.add('hidden');
-        hud.classList.add('show');
-        hint.classList.add('show');
-        dbg('камера запущена ✓');
-
-        // Через 2 секунды смотрим — виден ли поток на самом деле
-        setTimeout(function () {
-          const v = document.querySelector('a-scene video') || document.querySelector('video');
-          if (!v) {
-            dbg('ОШИБКА: video-элемент не создан');
-          } else if (v.videoWidth === 0) {
-            dbg('поток ещё не пошёл (videoWidth=0)');
-          } else {
-            dbg('видео идёт: ' + v.videoWidth + '×' + v.videoHeight);
-          }
-        }, 2000);
-
-        const mEl = document.querySelector('[ar-monster]');
-        if (mEl) {
-          mEl.addEventListener('monster-mode', function (e) {
-            hudMode.textContent = MODE_LABELS[e.detail.mode] || '';
-          });
-        }
+        dbg('камера запущена');
       })
       .catch(function (err) {
         const msg = String(err && err.message ? err.message : err);
-        dbg('камера не открылась: ' + msg);
-
-        let explain = 'Не удалось открыть камеру.';
-        if (/permission|denied|notallowed/i.test(msg)) {
-          explain = 'Нет доступа к камере. Разрешите его в настройках браузера.';
-        } else if (/https|secure/i.test(msg)) {
-          explain = 'Страница открыта без HTTPS. Нужен адрес https://.';
-        }
-
-        gate.querySelector('p').textContent = explain;
+        dbg('ошибка: ' + msg);
+        gate.querySelector('p').textContent = 'Камера не открылась: ' + msg;
         startBtn.textContent = 'ПОВТОРИТЬ';
         startBtn.disabled = false;
       });
-  });
-
-  // ─── 6. Тап = сменить анимацию ─────────────────────────────────
-  document.addEventListener('click', function (e) {
-    if (e.target === startBtn) return;
-    const mEl = document.querySelector('[ar-monster]');
-    if (mEl && mEl.components['ar-monster']) {
-      mEl.components['ar-monster'].nextMode();
-    }
-  });
-
-  window.addEventListener('error', function (e) {
-    dbg('JS error: ' + (e.message || 'unknown'));
   });
 })();
 </script>

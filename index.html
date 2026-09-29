@@ -231,11 +231,9 @@
      ВАЖНО: у html и body НЕ ДОЛЖНО быть непрозрачного фона.
 
      MindAR вставляет видео-поток как отдельный слой под 3D-холстом
-     (z-index: -2). Опаковый фон body рисуется ПОВЕРХ отрицательных
+     (z-index: -2). Непрозрачный фон body рисуется ПОВЕРХ отрицательных
      z-index слоёв — и полностью закрывает видео. Камера при этом
      работает, индикатор горит, а на экране чернота.
-
-     Именно поэтому падало и на iPhone, и на Android.
      ═══════════════════════════════════════════════════════════════════ */
   html, body {
     margin: 0;
@@ -336,15 +334,18 @@
 
 <!--
   ════════════════════════════════════════════════════════════════════════
-   imageTargetSrc — единственное, что меняется под вашу банку.
+   imageTargetSrc теперь указывает на ВАШ файл: ./targets.mind
 
-   СЕЙЧАС: тестовая карточка MindAR (проверяем, что конвейер жив).
-   ПОТОМ:  imageTargetSrc: ./targets.mind;
-           и файл targets.mind должен лежать рядом с этим HTML.
+   ⚠️ Положите targets.mind РЯДОМ с этим HTML на хостинге —
+      в той же папке, без вложенных директорий.
+
+   Если трекинг не находит банку, вернитесь к тестовой карточке
+   для проверки и вставьте сюда:
+   https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind
   ════════════════════════════════════════════════════════════════════════
 -->
 <a-scene
-  mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1"
+  mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1"
   color-space="sRGB"
   renderer="colorManagement: true; alpha: true"
   vr-mode-ui="enabled: false"
